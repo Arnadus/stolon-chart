@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: {{ template "stolon.fullname" . }}
+  name: {{ template "stolon.fullname" . }}-config
   labels:
     app: {{ template "stolon.fullname" . }}
     chart: "{{ .Chart.Name }}-{{ .Chart.Version }}"
@@ -18,15 +18,22 @@ spec:
     spec:
       serviceAccountName: {{ template "stolon.serviceAccountName" . }}
       restartPolicy: Never
-
-      {{- if eq .Values.store.backend "etcd" }}
       initContainers:
-      - name: "wait-etcd-cluster"
-        image: "gcr.io/google_containers/etcd-amd64:3.0.14"
-        command: ["/bin/sh", "-c", "while ! etcdctl --endpoints {{ .Values.store.endpoints }} cluster-health; do sleep 1 && echo -n .; done"]
-        imagePullPolicy: {{ default "Always" .Values.imagePullPolicy | quote }}
-      {{- end }}
-
+      - name: "init-config-cluster"
+        image: {{ .Values.image }}:{{ .Values.imageTag }}
+        imagePullPolicy: {{ default "Always" .Values.imagePullPolicy }}
+        env:
+          - name: PGHOST
+            value: {{ template "stolon.proxy.fullname" . }}
+          - name: PGUSER
+            value: {{ .Values.pgSuperuserName  | quote }}
+          - name: PGPASSWORD
+            value: {{ .Values.pgSuperuserPassword  | quote }}
+          - name: PGPORT
+            value: {{ .Values.ports.externalPort | quote }}
+          - name: PGDATABASE
+            value: "postgres"
+        command: ["/bin/sh", "-c", "while ! pg_isready ; do sleep 1 && echo -n .; done"]
       containers:
       - name: {{ template "stolon.fullname" . }}
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
@@ -40,15 +47,15 @@ spec:
             value: {{ include "stolon.clusterName" . | quote }}
         command: ["/usr/local/bin/stolonctl"]
         args:
-          - init
+          - update
+          - --patch
           {{- if eq .Values.store.backend "kubernetes" }}
           - --kube-resource-kind={{ default "configmap" .Values.store.kubeResourceKind }}
           {{- else }}
           - --store-endpoints={{ .Values.store.endpoints }}
           {{- end }}
-          - --yes
-          - --log-level=debug
-          - --file={{ .Values.configFile.path }}/{{ .Values.configFile.file }}.init
+          - --file={{ .Values.configFile.path }}/{{ .Values.configFile.file }}
+
         volumeMounts:
         - name: config
           mountPath: {{ .Values.configFile.path }}
@@ -56,3 +63,4 @@ spec:
       - name: config
         configMap:
           name: {{ default  .Values.configFile.configMap .Values.configFile.existingConfigmap }}
+

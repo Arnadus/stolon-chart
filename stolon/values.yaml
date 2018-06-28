@@ -47,6 +47,15 @@ store:
   ## store endpoints MUST be set!
   endpoints: "http://etcd-etcd-0.etcd-etcd:2379,http://etcd-etcd-1.etcd-etcd:2379,http://etcd-etcd-2.etcd-etcd:2379"
 
+barman: barman-service
+
+configFile:
+  file: cluster.json
+  path: /stolon-config/
+  configMap: cluster-config-configmap
+#  existingConfigmap:
+  template: templates/config.json
+
 pgReplUsername: "repluser"
 ## set password for the repluser
 ## default is 40 random chars
@@ -57,6 +66,8 @@ pgSuperuserName: "stolon"
 ## set password for the superuser
 ## default is 40 random chars
 # pgSuperuserPassword: ""
+
+initMode: new
 
 sentinel:
   replicas: 3
@@ -118,6 +129,10 @@ keeper:
   ## Configure resource requests and limits.
   ## ref: https://kubernetes.io/docs/user-guide/compute-resources/
   ##
+  sshSecret:
+
+  retore:
+    configmap:
 
   resources:
     requests:
@@ -152,6 +167,8 @@ persistence:
   ##
   size: 10Gi
 
+  hostpath: /var/lib/stolon/
+  hostpathType: DirectoryOrCreate
 rbac:
   # Specifies whether RBAC resources should be created
   create: true
@@ -162,3 +179,7 @@ serviceAccount:
   # The name of the ServiceAccount to use.
   # If not set and create is true, a name is generated using the fullname template
   # name: my-name
+
+
+
+# stolonctl update --patch '{ "pgParameters" : { "unix_socket_directory": "/var/run/postgresql" } }' --cluster-name kube-stolon --store-backend etcd3 --store-endpoints http://stolon-stolon-etcd:2379

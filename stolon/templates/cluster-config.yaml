@@ -1,0 +1,37 @@
+{{- if (empty .Values.configFile.existingConfigMap) -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.configFile.configMap }}
+data:
+  {{ .Values.configFile.file }}: |
+    {
+      "additionalMasterReplicationSlots": ["barman"],
+      "usePgrewind": true,
+      "pgParameters": {
+        "synchronous_commit": "Off",
+        "max_connections": "100",
+        "shared_buffers": "1MB",
+        "effective_cache_size": "2MB",
+        "maintenance_work_mem": "5MB",
+        "min_wal_size" : "1MB",
+        "max_wal_size" : "2MB",
+        "checkpoint_completion_target" : "0.7",
+        "wal_buffers" : "16MB",
+        "default_statistics_target" : "100",
+        "random_page_cost" : "4",
+        "effective_io_concurrency" : "1",
+        "work_mem" : "5242kB",
+        "archive_mode": "On",
+        "archive_command": "rsync -a %p barman@{{ .Values.barman }}:/var/lib/barman/speaky/incoming/%f"
+      },
+      "pgHBA": [],
+      "pitrConfig":
+      {
+        "dataRestoreCommand": "/path/custom/datarestore/file ",
+        "archiveRecoverySettings":
+        { "restoreCommand": "barman-wal-restore -U barman < {{ .Values.barman }} > stolon \"%f\" \"%p\""
+        }
+      }
+    }
+{{- end -}}

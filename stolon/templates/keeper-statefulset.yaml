@@ -22,6 +22,7 @@ spec:
       annotations:
         pod.alpha.kubernetes.io/initialized: "true"
     spec:
+      subdomain: stolon-keeper
       serviceAccountName: {{ template "stolon.serviceAccountName" . }}
       terminationGracePeriodSeconds: 10
 
@@ -39,24 +40,40 @@ spec:
       tolerations:
 {{ toYaml .Values.keeper.tolerations | indent 8 }}
 {{- end }}
-
       containers:
       - name: {{ template "stolon.keeper.fullname" . }}
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
         imagePullPolicy: {{ default "" .Values.imagePullPolicy | quote }}
+        lifecycle:
+          postStart:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - chown -R stolon:stolon /home/stolon &&
+                  chown  stolon:stolon {{ .Values.keeper.restore.path }}/{{ .Values.keeper.restore.file }} &&
+                  chmod 700 /home/stolon &&
+                  chown -R stolon:stolon /home/stolon/ &&
+                  chmod -R 700 /home/stolon/ &&
+                  chmod -R 600 /home/stolon/.ssh/* &&
+                  /usr/sbin/sshd -e
         command:
           - "/bin/bash"
           - "-ec"
           - |
             # Generate our keeper uid using the pod index
             IFS='-' read -ra ADDR <<< "$(hostname)"
-            export STKEEPER_UID="keeper${ADDR[-1]}"
+            export STKEEPER_UID="keeper_${NODE_NAME//./_}"
             export POD_IP=$(hostname -i)
             export STKEEPER_PG_LISTEN_ADDRESS=$POD_IP
             export STOLON_DATA=/stolon-data
             chown stolon:stolon $STOLON_DATA
             exec gosu stolon stolon-keeper --data-dir $STOLON_DATA
         env:
+          - name: NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
           - name: POD_NAME
             valueFrom:
               fieldRef:
@@ -82,21 +99,93 @@ spec:
             value: "/etc/secrets/stolon/pg_su_password"
           - name: STKEEPER_DEBUG
             value: {{ .Values.debug | quote}}
+          - name: STOLONCTL_STORE_BACKEND
+            value: {{ .Values.store.backend | quote}}
+          - name: STOLONCTL_STORE_ENDPOINTS
+            value: {{ .Values.store.endpoints | quote}}
+          - name: STOLONCTL_CLUSTER_NAME
+            value: {{ include "stolon.clusterName" . | quote }}
+
+          - name: PGHOST
+            value: /tmp
+          - name: PGUSER
+            value: {{ .Values.pgSuperuserName  | quote}}
+          - name: PGPASSWORD
+            value: {{ .Values.pgSuperuserPassword  | quote}}
+
+{{- if .Values.keeper.extraEnv }}
+{{ toYaml .Values.keeper.extraEnv | indent 10 }}
+{{- end }}
+
+
         ports:
           - containerPort: {{ .Values.ports.internalPort }}
         volumeMounts:
+
+        {{- if eq .Values.role "standby"}}
+        - name: passfile-secret
+          mountPath: {{ .Values.standbyConfig.master.passfile.path }}/{{ .Values.standbyConfig.master.passfile.file }}
+          subPath: {{ .Values.standbyConfig.master.passfile.file }}
+        {{- end }}
+
         - name: stolon-data
           mountPath: /stolon-data
         - name: stolon-secrets
           mountPath: /etc/secrets/stolon
+        - name: ssh-secrets
+          mountPath: /root/.ssh/id_rsa
+          subPath: id_rsa
+        - name: ssh-secrets
+          mountPath: /root/.ssh/id_rsa.pub
+          subPath: id_rsa.pub
+        - name: restore
+          mountPath: {{ .Values.keeper.restore.path }}/{{ .Values.keeper.restore.file }}
+          subPath: {{ .Values.keeper.restore.file }}
+        - name: ssh-secrets
+          mountPath: /home/stolon/.ssh/id_rsa
+          subPath: id_rsa
+        - name: ssh-secrets
+          mountPath: /home/stolon/.ssh/id_rsa.pub
+          subPath: id_rsa.pub
+        - name: ssh-secrets
+          mountPath: /home/stolon/.ssh/authorized_keys
+          subPath: id_rsa.pub
+        - name: config
+          mountPath: {{ .Values.configFile.path }}
         resources:
 {{ toYaml .Values.keeper.resources | indent 10 }}
       volumes:
         - name: stolon-secrets
           secret:
             secretName: {{ template "stolon.fullname" . }}
+        - name: config
+          configMap:
+            name: {{ default  .Values.configFile.configMap .Values.configFile.existingConfigmap }}
+        - name: ssh-secrets
+          secret:
+            secretName: {{ .Values.keeper.sshSecret }}
+            defaultMode: 384
 
-{{- if .Values.persistence.enabled }}
+        {{- if eq .Values.role "standby"}}
+        - name: passfile-secret
+          secret:
+            secretName: {{ .Values.standbyConfig.master.passfile.secretName }}
+            defaultMode: 384
+        {{- end }}
+
+        - name: restore
+          configMap:
+            name: {{ .Values.keeper.restore.configmap }}
+            defaultMode: 0700
+{{- if not .Values.persistence.enabled }}
+        - name: stolon-data
+          emptyDir: {}
+{{- else if .Values.persistence.hostpath }}
+        - name: stolon-data
+          hostPath:
+            path: {{ .Values.persistence.hostpath }}{{ .Release.Name }}
+            type: {{ .Values.persistence.hostpathType }}
+{{- else }}
   volumeClaimTemplates:
     - metadata:
         name: stolon-data
@@ -111,7 +200,6 @@ spec:
     {{- else }}
         storageClassName: default
   {{- end }}
-{{- else }}
-        - name: stolon-data
-          emptyDir: {}
 {{- end }}
+
+

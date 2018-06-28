@@ -1,0 +1,5 @@
+dependencies:
+- name: etcd
+  version: "2.0.2"
+  alias: etcd
+  repository: "http://storage.googleapis.com/kubernetes-charts-incubator"
