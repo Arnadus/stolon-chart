@@ -19,6 +19,9 @@ spec:
       serviceAccountName: {{ template "stolon.serviceAccountName" . }}
       restartPolicy: Never
 
+      imagePullSecrets:
+{{ toYaml .Values.imagePullSecrets | indent 6 }}
+
       {{- if eq .Values.store.backend "etcd" }}
       initContainers:
       - name: "wait-etcd-cluster"

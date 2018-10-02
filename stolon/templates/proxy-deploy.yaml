@@ -35,6 +35,9 @@ spec:
 {{ toYaml .Values.proxy.tolerations | indent 8 }}
 {{- end }}
 
+      imagePullSecrets:
+{{ toYaml .Values.imagePullSecrets | indent 6 }}
+
       containers:
       - name: {{ template "stolon.proxy.fullname" . }}
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"

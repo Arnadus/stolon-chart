@@ -9,6 +9,8 @@
 ## Stolon image.
 ##
 
+imagePullSecrets: []
+
 image: "sorintlab/stolon"
 
 ## Stolon image version.
@@ -51,7 +53,7 @@ barman: barman-service
 
 configFile:
   file: cluster.json
-  path: /stolon-config/
+  path: /stolon-config
   configMap: cluster-config-configmap
 #  existingConfigmap:
   template: templates/config.json

@@ -36,6 +36,9 @@ spec:
 {{ toYaml .Values.sentinel.tolerations | indent 8 }}
 {{- end }}
 
+      imagePullSecrets:
+{{ toYaml .Values.imagePullSecrets | indent 6 }}
+
       containers:
       - name: {{ template "stolon.sentinel.fullname" . }}
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"

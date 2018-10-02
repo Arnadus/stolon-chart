@@ -40,6 +40,10 @@ spec:
       tolerations:
 {{ toYaml .Values.keeper.tolerations | indent 8 }}
 {{- end }}
+
+      imagePullSecrets:
+{{ toYaml .Values.imagePullSecrets | indent 6 }}
+
       containers:
       - name: {{ template "stolon.keeper.fullname" . }}
         image: "{{ .Values.image }}:{{ .Values.imageTag }}"
@@ -50,12 +54,17 @@ spec:
               command:
                 - /bin/sh
                 - -c
-                - chown -R stolon:stolon /home/stolon &&
+                -
+                  cp -r /tmp/home/stolon/.ssh /home/stolon &&
+                  mkdir {{ .Values.keeper.restore.path }} &&
+                  cp  /tmp/{{ .Values.keeper.restore.file }} {{ .Values.keeper.restore.path }} &&
                   chown  stolon:stolon {{ .Values.keeper.restore.path }}/{{ .Values.keeper.restore.file }} &&
+                  chmod +x {{ .Values.keeper.restore.path }}/{{ .Values.keeper.restore.file }} &&
                   chmod 700 /home/stolon &&
                   chown -R stolon:stolon /home/stolon/ &&
                   chmod -R 700 /home/stolon/ &&
                   chmod -R 600 /home/stolon/.ssh/* &&
+
                   /usr/sbin/sshd -e
         command:
           - "/bin/bash"
@@ -139,16 +148,16 @@ spec:
           mountPath: /root/.ssh/id_rsa.pub
           subPath: id_rsa.pub
         - name: restore
-          mountPath: {{ .Values.keeper.restore.path }}/{{ .Values.keeper.restore.file }}
+          mountPath: /tmp/{{ .Values.keeper.restore.file }}
           subPath: {{ .Values.keeper.restore.file }}
         - name: ssh-secrets
-          mountPath: /home/stolon/.ssh/id_rsa
+          mountPath: /tmp/home/stolon/.ssh/id_rsa
           subPath: id_rsa
         - name: ssh-secrets
-          mountPath: /home/stolon/.ssh/id_rsa.pub
+          mountPath: /tmp/home/stolon/.ssh/id_rsa.pub
           subPath: id_rsa.pub
         - name: ssh-secrets
-          mountPath: /home/stolon/.ssh/authorized_keys
+          mountPath: /tmp/home/stolon/.ssh/authorized_keys
           subPath: id_rsa.pub
         - name: config
           mountPath: {{ .Values.configFile.path }}
